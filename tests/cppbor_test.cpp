@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <cfloat>
+#include <cmath>
 #include <cstdint>
 #include <iomanip>
 #include <sstream>
@@ -1648,11 +1650,47 @@ TEST(FullParserTest, Tstr) {
 }
 
 TEST(FullParserTest, IndefiniteLengthTstr) {
-    vector<uint8_t> indefiniteRangeTstr = {0x7F, 't', 'e', 's', 't'};
+    vector<uint8_t> indefiniteRangeTstr = {0x7F, 0x64, 't', 'e', 's', 't',
+                                           0x63, 'a',  'b', 'c', 0xFF};
+    Tstr val("testabc");
 
     auto [item, pos, message] = parse(indefiniteRangeTstr);
+    EXPECT_THAT(item, MatchesItem(val));
+}
+
+TEST(FullParserTest, EmptyIndefiniteLengthTstr) {
+    vector<uint8_t> indefiniteRangeTstr = {0x7F, 0xFF};
+    Tstr val("");
+
+    auto [item, pos, message] = parse(indefiniteRangeTstr);
+    EXPECT_THAT(item, MatchesItem(val));
+}
+
+TEST(FullParserTest, EmptyChunkIndefiniteLengthTstr) {
+    vector<uint8_t> indefiniteRangeTstr = {0x7F, 0x60, 0xFF};
+    Tstr val("");
+
+    auto [item, pos, message] = parse(indefiniteRangeTstr);
+    EXPECT_THAT(item, MatchesItem(val));
+}
+
+TEST(FullParserTest, SingleChunkIndefiniteLengthTstr) {
+    vector<uint8_t> indefiniteRangeTstr = {0x7F, 0x64, 't', 'e', 's', 't', 0xFF};
+    Tstr val("test");
+
+    auto [item, pos, message] = parse(indefiniteRangeTstr);
+    EXPECT_THAT(item, MatchesItem(val));
+}
+
+TEST(FullParserTest, IndefiniteLengthViewTstr) {
+    vector<uint8_t> indefiniteRangeViewTstr = {0x7F, 0x64, 't', 'e', 's', 't',
+                                               0x63, 'a',  'b', 'c', 0xFF};
+
+    auto [item, pos, message] =
+            parseWithViews(indefiniteRangeViewTstr.data(),
+                           indefiniteRangeViewTstr.data() + indefiniteRangeViewTstr.size());
     EXPECT_THAT(item, IsNull());
-    EXPECT_EQ(pos, indefiniteRangeTstr.data());
+    EXPECT_EQ(pos, indefiniteRangeViewTstr.data());
     EXPECT_EQ(message, "Unsupported indefinite length item.");
 }
 
@@ -1664,11 +1702,47 @@ TEST(FullParserTest, Bstr) {
 }
 
 TEST(FullParserTest, IndefiniteLengthBstr) {
-    vector<uint8_t> indefiniteRangeBstr = {0x5F, 0x41, 0x42, 0x43, 0x44};
+    vector<uint8_t> indefiniteRangeBstr = {0x5F, 0x44, 0xaa, 0xbb, 0xcc, 0xdd,
+                                           0x43, 0xee, 0xff, 0x99, 0xFF};
+    Bstr val("\xaa\xbb\xcc\xdd\xee\xff\x99"s);
 
     auto [item, pos, message] = parse(indefiniteRangeBstr);
+    EXPECT_THAT(item, MatchesItem(val));
+}
+
+TEST(FullParserTest, EmptyIndefiniteLengthBstr) {
+    vector<uint8_t> indefiniteRangeBstr = {0x5F, 0xFF};
+    Bstr val(""s);
+
+    auto [item, pos, message] = parse(indefiniteRangeBstr);
+    EXPECT_THAT(item, MatchesItem(val));
+}
+
+TEST(FullParserTest, EmptyChunkIndefiniteLengthBstr) {
+    vector<uint8_t> indefiniteRangeBstr = {0x5F, 0x40, 0xFF};
+    Bstr val(""s);
+
+    auto [item, pos, message] = parse(indefiniteRangeBstr);
+    EXPECT_THAT(item, MatchesItem(val));
+}
+
+TEST(FullParserTest, SingleChunkIndefiniteLengthBstr) {
+    vector<uint8_t> indefiniteRangeBstr = {0x5F, 0x44, 0xaa, 0xbb, 0xcc, 0xdd, 0xFF};
+    Bstr val("\xaa\xbb\xcc\xdd"s);
+
+    auto [item, pos, message] = parse(indefiniteRangeBstr);
+    EXPECT_THAT(item, MatchesItem(val));
+}
+
+TEST(FullParserTest, IndefiniteLengthViewBstr) {
+    vector<uint8_t> indefiniteRangeViewBstr = {0x5F, 0x44, 0xaa, 0xbb, 0xcc, 0xdd,
+                                               0x43, 0xee, 0xff, 0x99, 0xFF};
+
+    auto [item, pos, message] =
+            parseWithViews(indefiniteRangeViewBstr.data(),
+                           indefiniteRangeViewBstr.data() + indefiniteRangeViewBstr.size());
     EXPECT_THAT(item, IsNull());
-    EXPECT_EQ(pos, indefiniteRangeBstr.data());
+    EXPECT_EQ(pos, indefiniteRangeViewBstr.data());
     EXPECT_EQ(message, "Unsupported indefinite length item.");
 }
 
@@ -1949,7 +2023,7 @@ TEST(FullParserTest, UnassignedSimpleValue) {
     EXPECT_EQ("Unsupported half-floating-point or simple value.", message);
 }
 
-#ifdef __STDC_IEC_559__
+#if defined(__STDC_IEC_559__) || FLT_MANT_DIG == 24 || __FLT_MANT_DIG__ == 24
 TEST(FullParserTest, FloatingPointValue) {
     vector<uint8_t> floatingPointValue = {0xFA, 0x12, 0x75, 0x34, 0x37};
     float f_val = 7.737272847557572e-28;
@@ -2021,10 +2095,11 @@ TEST(FullParserTest, MinFloatingPointValue) {
     Float f(f_val);
     EXPECT_EQ(f.encode(), floatingPointValue);
 }
+#endif  // defined(__STDC_IEC_559__) || FLT_MANT_DIG == 24 || __FLT_MANT_DIG__ == 24
 
+#if defined(__STDC_IEC_559__) || DBL_MANT_DIG == 53 || __DBL_MANT_DIG__ == 53
 TEST(FullParserTest, DoubleValue) {
-    vector<uint8_t> doubleValue =
-            {0xFB, 0x40, 0x09, 0x21, 0xFB, 0x4D, 0x12, 0xD8, 0x4A};
+    vector<uint8_t> doubleValue = {0xFB, 0x40, 0x09, 0x21, 0xFB, 0x4D, 0x12, 0xD8, 0x4A};
     double d_val = 3.1415926000000001;
 
     auto [item, pos, message] = parse(doubleValue);
@@ -2036,8 +2111,7 @@ TEST(FullParserTest, DoubleValue) {
 }
 
 TEST(FullParserTest, PositiveInfinityDoubleValue) {
-    vector<uint8_t> doubleValue =
-            {0xFB, 0x7F, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    vector<uint8_t> doubleValue = {0xFB, 0x7F, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     double d_val = std::numeric_limits<double>::infinity();
 
     auto [item, pos, message] = parse(doubleValue);
@@ -2049,8 +2123,7 @@ TEST(FullParserTest, PositiveInfinityDoubleValue) {
 }
 
 TEST(FullParserTest, NegativeInfinityDoubleValue) {
-    vector<uint8_t> doubleValue =
-            {0xFB, 0xFF, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    vector<uint8_t> doubleValue = {0xFB, 0xFF, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     double d_val = -std::numeric_limits<double>::infinity();
 
     auto [item, pos, message] = parse(doubleValue);
@@ -2062,8 +2135,7 @@ TEST(FullParserTest, NegativeInfinityDoubleValue) {
 }
 
 TEST(FullParserTest, QuietNaNDoubleValue) {
-    vector<uint8_t> doubleValue =
-            {0xFB, 0x7F, 0xF8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    vector<uint8_t> doubleValue = {0xFB, 0x7F, 0xF8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
     auto [item, pos, message] = parse(doubleValue);
     EXPECT_THAT(item, NotNull());
@@ -2075,8 +2147,7 @@ TEST(FullParserTest, QuietNaNDoubleValue) {
 }
 
 TEST(FullParserTest, MaxDoubleValue) {
-    vector<uint8_t> doubleValue =
-            {0xFB, 0x7F, 0xEF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    vector<uint8_t> doubleValue = {0xFB, 0x7F, 0xEF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     double d_val = std::numeric_limits<double>::max();
 
     auto [item, pos, message] = parse(doubleValue);
@@ -2088,8 +2159,7 @@ TEST(FullParserTest, MaxDoubleValue) {
 }
 
 TEST(FullParserTest, MinDoubleValue) {
-    vector<uint8_t> doubleValue =
-            {0xFB, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    vector<uint8_t> doubleValue = {0xFB, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     double d_val = std::numeric_limits<double>::min();
 
     auto [item, pos, message] = parse(doubleValue);
@@ -2099,7 +2169,7 @@ TEST(FullParserTest, MinDoubleValue) {
     Double d(d_val);
     EXPECT_EQ(d.encode(), doubleValue);
 }
-#endif  // __STDC_IEC_559__
+#endif  // __STDC_IEC_559__ || DBL_MANT_DIG == 53 || __DBL_MANT_DIG__ == 53
 
 TEST(MapGetValueByKeyTest, Map) {
     Array compoundItem(1, 2, 3, 4, 5, Map(4, 5, "a", "b"));

@@ -1222,8 +1222,8 @@ const std::unique_ptr<Item>& Map::get(Key key) const {
     if (mCanonicalized) {
         // It's sorted, so binary-search it.
         auto found = std::lower_bound(begin(), end(), keyItem.get(),
-                                      [](const entry_type& entry, const Item* key) {
-                                          return keyLess(entry.first.get(), key);
+                                      [](const entry_type& entry, const Item* ikey) {
+                                          return keyLess(entry.first.get(), ikey);
                                       });
         return (found == end() || *found->first != *keyItem) ? kEmptyItemPtr : found->second;
     } else {
